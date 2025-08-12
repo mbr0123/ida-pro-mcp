@@ -722,6 +722,85 @@ def get_function_by_address(
 
 @jsonrpc
 @idaread
+def find_function_containing_address(
+    address: Annotated[str, "Address to find the containing function for"],
+) -> Function:
+    """Find the function that contains the given address (may not be the function start)"""
+    addr = parse_address(address)
+    func = idaapi.get_func(addr)
+    if not func:
+        raise IDAError(f"No function contains address {address}")
+    return get_function(func.start_ea)
+
+@jsonrpc
+@idaread
+def analyze_address(
+    address: Annotated[str, "Address to analyze"],
+) -> dict:
+    """Analyze what's at a given address - function info, instructions, etc."""
+    addr = parse_address(address)
+    result = {
+        "address": hex(addr),
+        "has_code": idaapi.is_code(idaapi.get_flags(addr)),
+        "has_data": idaapi.is_data(idaapi.get_flags(addr)),
+    }
+    
+    # Check if it's in a function
+    func = idaapi.get_func(addr)
+    if func:
+        try:
+            func_name = func.get_name() if hasattr(func, 'get_name') else ida_funcs.get_func_name(func.start_ea)
+        except:
+            func_name = f"sub_{func.start_ea:x}"
+        result["function"] = {
+            "start": hex(func.start_ea),
+            "end": hex(func.end_ea),
+            "name": func_name,
+            "is_function_start": addr == func.start_ea
+        }
+    else:
+        result["function"] = None
+        
+        # Find nearest functions
+        prev_func = idaapi.get_prev_func(addr)
+        next_func = idaapi.get_next_func(addr)
+        
+        result["nearest_functions"] = {}
+        if prev_func:
+            try:
+                prev_name = prev_func.get_name() if hasattr(prev_func, 'get_name') else ida_funcs.get_func_name(prev_func.start_ea)
+            except:
+                prev_name = f"sub_{prev_func.start_ea:x}"
+            result["nearest_functions"]["previous"] = {
+                "start": hex(prev_func.start_ea),
+                "name": prev_name
+            }
+        if next_func:
+            try:
+                next_name = next_func.get_name() if hasattr(next_func, 'get_name') else ida_funcs.get_func_name(next_func.start_ea)
+            except:
+                next_name = f"sub_{next_func.start_ea:x}"
+            result["nearest_functions"]["next"] = {
+                "start": hex(next_func.start_ea),
+                "name": next_name
+            }
+    
+    # Get instruction at address if it's code
+    if result["has_code"]:
+        try:
+            result["instruction"] = ida_lines.tag_remove(idaapi.generate_disasm_line(addr, 0))
+        except:
+            result["instruction"] = None
+    
+    # Get name at address
+    name = idc.get_name(addr, 0)
+    if name:
+        result["name"] = name
+    
+    return result
+
+@jsonrpc
+@idaread
 def get_current_address() -> str:
     """Get the address currently selected by the user"""
     return hex(idaapi.get_screen_ea())
@@ -1030,7 +1109,26 @@ def disassemble_function(
     start = parse_address(start_address)
     func: ida_funcs.func_t = idaapi.get_func(start)
     if not func:
-        raise IDAError(f"No function found containing address {start_address}")
+        # Try to find the nearest function and provide helpful error message
+        nearest_func_start = idaapi.get_func(start)
+        if nearest_func_start is None:
+            # Look for nearby functions
+            prev_func = idaapi.get_prev_func(start)
+            next_func = idaapi.get_next_func(start)
+            
+            error_msg = f"No function found containing address {start_address}"
+            if prev_func:
+                prev_name = prev_func.get_name() if hasattr(prev_func, 'get_name') else ida_funcs.get_func_name(prev_func.start_ea)
+                error_msg += f"\n\nNearest previous function: {prev_name} at {hex(prev_func.start_ea)}"
+            if next_func:
+                next_name = next_func.get_name() if hasattr(next_func, 'get_name') else ida_funcs.get_func_name(next_func.start_ea)
+                error_msg += f"\nNearest next function: {next_name} at {hex(next_func.start_ea)}"
+            
+            error_msg += f"\n\nTry using one of these function start addresses instead, or create a function at {start_address} first in IDA Pro."
+        else:
+            error_msg = f"No function found at {start_address}"
+        
+        raise IDAError(error_msg)
     if is_window_active():
         ida_kernwin.jumpto(start)
 
