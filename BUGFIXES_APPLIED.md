@@ -173,6 +173,17 @@ allow_reuse_address = True  # Allow reuse to prevent binding errors
 - Connection logging in IDA server
 **Impact**: Much easier debugging of connection issues.
 
+### 13. **Fixed Type Validation Error in disassemble_function** ✅
+**Issue**: "None is not of type 'array'" error when calling disassemble_function due to None values in required array fields.
+**Location**: `src/ida_pro_mcp/mcp-plugin.py` `disassemble_function` method
+**Fix**: Added comprehensive null checking and fallbacks:
+- Initialize `arguments` as empty list instead of None
+- Safe prototype parsing with exception handling
+- Stack frame variable extraction with fallbacks
+- Function name extraction with fallbacks
+- Line validation before adding to array
+**Impact**: Prevents type validation errors and ensures all required fields are valid arrays.
+
 ## Files Modified
 - `src/ida_pro_mcp/mcp-plugin.py` - Main fixes for IDA compatibility, thread safety, type handling, host standardization
 - `src/ida_pro_mcp/server.py` - Connection resource management fix, Python compatibility, enhanced debugging

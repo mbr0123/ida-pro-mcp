@@ -1129,20 +1129,52 @@ def disassemble_function(
         if label:
             line.update(label=label)
 
-        lines += [line]
+        # Ensure line is valid before adding
+        if line and isinstance(line, dict):
+            lines += [line]
 
     prototype = func.get_prototype()
-    arguments: list[Argument] = [Argument(name=arg.name, type=f"{arg.type}") for arg in prototype.iter_func()] if prototype else None
+    arguments: list[Argument] = []
+    
+    # Extract arguments from prototype if available
+    if prototype:
+        try:
+            arguments = [Argument(name=arg.name, type=f"{arg.type}") for arg in prototype.iter_func()]
+        except Exception:
+            # If prototype parsing fails, use empty list
+            arguments = []
+
+    # Get stack frame variables with fallback
+    try:
+        stack_frame = get_stack_frame_variables_internal(func.start_ea)
+        if stack_frame is None:
+            stack_frame = []
+    except Exception:
+        stack_frame = []
+
+    # Get function name safely
+    try:
+        func_name = func.get_name() if hasattr(func, 'get_name') else getattr(func, 'name', f"sub_{func.start_ea:x}")
+    except Exception:
+        func_name = f"sub_{func.start_ea:x}"
+
+    # Ensure lines is a valid list
+    if not lines or not isinstance(lines, list):
+        lines = []
 
     disassembly_function = DisassemblyFunction(
-        name=func.name,
+        name=func_name,
         start_ea=f"{func.start_ea:#x}",
-        stack_frame=get_stack_frame_variables_internal(func.start_ea),
+        stack_frame=stack_frame,
         lines=lines
     )
 
     if prototype:
-        disassembly_function.update(return_type=f"{prototype.get_rettype()}")
+        try:
+            disassembly_function.update(return_type=f"{prototype.get_rettype()}")
+        except Exception:
+            # If return type extraction fails, skip it
+            pass
 
     if arguments:
         disassembly_function.update(arguments=arguments)
