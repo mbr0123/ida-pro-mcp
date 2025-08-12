@@ -136,9 +136,46 @@ except ImportError:
 8. Test decompiler license error scenarios
 9. Test JSON serialization with complex IDA objects
 
+### 10. **Python Version Compatibility for HTTPConnection** ✅
+**Issue**: HTTPConnection context manager not supported in Python < 3.9, causing connection failures.
+**Location**: `src/ida_pro_mcp/server.py` `make_jsonrpc_request` function
+**Fix**: Reverted to manual connection management with proper cleanup:
+```python
+conn = None
+try:
+    conn = http.client.HTTPConnection(ida_host, ida_port, timeout=10)
+    # ... connection operations ...
+finally:
+    if conn:
+        try:
+            conn.close()
+        except:
+            pass
+```
+**Impact**: Ensures compatibility with older Python versions while maintaining proper resource cleanup.
+
+### 11. **Host Address Standardization** ✅
+**Issue**: Server bound to `localhost` while client connected to `127.0.0.1`, causing connection failures on some systems.
+**Location**: `src/ida_pro_mcp/mcp-plugin.py` Server class
+**Fix**: Standardized both to use `127.0.0.1`:
+```python
+HOST = "127.0.0.1"  # Use explicit IP to match client expectations
+allow_reuse_address = True  # Allow reuse to prevent binding errors
+```
+**Impact**: Eliminates localhost resolution issues on Windows systems.
+
+### 12. **Enhanced Connection Debugging** ✅
+**Issue**: Connection failures provided minimal debugging information.
+**Location**: `src/ida_pro_mcp/server.py` `check_connection` function
+**Fix**: Added comprehensive error reporting and troubleshooting:
+- Specific error type detection
+- Step-by-step troubleshooting instructions
+- Connection logging in IDA server
+**Impact**: Much easier debugging of connection issues.
+
 ## Files Modified
-- `src/ida_pro_mcp/mcp-plugin.py` - Main fixes for IDA compatibility, thread safety, type handling
-- `src/ida_pro_mcp/server.py` - Connection resource management fix
+- `src/ida_pro_mcp/mcp-plugin.py` - Main fixes for IDA compatibility, thread safety, type handling, host standardization
+- `src/ida_pro_mcp/server.py` - Connection resource management fix, Python compatibility, enhanced debugging
 - `BUGFIXES_APPLIED.md` - This documentation (new file)
 
 ## GitHub Issues Addressed

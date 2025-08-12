@@ -28,31 +28,39 @@ def make_jsonrpc_request(method: str, *params):
     }
     jsonrpc_request_id += 1
 
-    # Use context manager to ensure connection is always closed
+    # Manual connection management for Python version compatibility
+    conn = None
     try:
-        with http.client.HTTPConnection(ida_host, ida_port) as conn:
-            conn.request("POST", "/mcp", json.dumps(request), {
-                "Content-Type": "application/json"
-            })
-            response = conn.getresponse()
-            data = json.loads(response.read().decode())
+        conn = http.client.HTTPConnection(ida_host, ida_port, timeout=10)  # 10 second timeout
+        conn.request("POST", "/mcp", json.dumps(request), {
+            "Content-Type": "application/json"
+        })
+        response = conn.getresponse()
+        data = json.loads(response.read().decode())
 
-            if "error" in data:
-                error = data["error"]
-                code = error["code"]
-                message = error["message"]
-                pretty = f"JSON-RPC error {code}: {message}"
-                if "data" in error:
-                    pretty += "\n" + error["data"]
-                raise Exception(pretty)
+        if "error" in data:
+            error = data["error"]
+            code = error["code"]
+            message = error["message"]
+            pretty = f"JSON-RPC error {code}: {message}"
+            if "data" in error:
+                pretty += "\n" + error["data"]
+            raise Exception(pretty)
 
-            result = data["result"]
-            # NOTE: LLMs do not respond well to empty responses
-            if result is None:
-                result = "success"
-            return result
+        result = data["result"]
+        # NOTE: LLMs do not respond well to empty responses
+        if result is None:
+            result = "success"
+        return result
     except Exception:
         raise
+    finally:
+        # Ensure connection is always closed
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass  # Ignore errors when closing
 
 @mcp.tool()
 def check_connection() -> str:
@@ -65,9 +73,23 @@ def check_connection() -> str:
             shortcut = "Ctrl+Option+M"
         else:
             shortcut = "Ctrl+Alt+M"
+        
         # Include the actual error for debugging
         error_details = str(e)
-        return f"Failed to connect to IDA Pro! Error: {error_details}\n\nDid you run Edit -> Plugins -> MCP ({shortcut}) to start the server?\nMake sure IDA server is running on {ida_host}:{ida_port}"
+        error_type = type(e).__name__
+        
+        # Provide specific troubleshooting based on error type
+        troubleshooting = ""
+        if "ConnectionRefusedError" in error_type or "Connection refused" in error_details:
+            troubleshooting = "\n🔧 The server is not running. Please start it in IDA Pro."
+        elif "TimeoutError" in error_type or "timed out" in error_details:
+            troubleshooting = "\n🔧 Connection timed out. Check if IDA Pro is responsive."
+        elif "gaierror" in error_type or "Name or service not known" in error_details:
+            troubleshooting = "\n🔧 DNS resolution issue. Check network configuration."
+        else:
+            troubleshooting = "\n🔧 Check that IDA Pro is running and the plugin is active."
+        
+        return f"❌ Failed to connect to IDA Pro!\n\n🔍 Error: {error_type}: {error_details}\n\n📋 Troubleshooting:{troubleshooting}\n\n🚀 Steps to fix:\n1. Open IDA Pro with a binary loaded\n2. Run Edit → Plugins → MCP ({shortcut}) to start the server\n3. Look for '[MCP] Server started at http://127.0.0.1:13337' in IDA console\n4. Try connection again\n\n🌐 Expected server: {ida_host}:{ida_port}"
 
 # Code taken from https://github.com/mrexodia/ida-pro-mcp (MIT License)
 class MCPVisitor(ast.NodeVisitor):
