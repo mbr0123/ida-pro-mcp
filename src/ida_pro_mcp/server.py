@@ -19,7 +19,7 @@ ida_port = 13337
 def make_jsonrpc_request(method: str, *params):
     """Make a JSON-RPC request to the IDA plugin"""
     global jsonrpc_request_id, ida_host, ida_port
-    conn = http.client.HTTPConnection(ida_host, ida_port)
+    
     request = {
         "jsonrpc": "2.0",
         "method": method,
@@ -28,31 +28,31 @@ def make_jsonrpc_request(method: str, *params):
     }
     jsonrpc_request_id += 1
 
+    # Use context manager to ensure connection is always closed
     try:
-        conn.request("POST", "/mcp", json.dumps(request), {
-            "Content-Type": "application/json"
-        })
-        response = conn.getresponse()
-        data = json.loads(response.read().decode())
+        with http.client.HTTPConnection(ida_host, ida_port) as conn:
+            conn.request("POST", "/mcp", json.dumps(request), {
+                "Content-Type": "application/json"
+            })
+            response = conn.getresponse()
+            data = json.loads(response.read().decode())
 
-        if "error" in data:
-            error = data["error"]
-            code = error["code"]
-            message = error["message"]
-            pretty = f"JSON-RPC error {code}: {message}"
-            if "data" in error:
-                pretty += "\n" + error["data"]
-            raise Exception(pretty)
+            if "error" in data:
+                error = data["error"]
+                code = error["code"]
+                message = error["message"]
+                pretty = f"JSON-RPC error {code}: {message}"
+                if "data" in error:
+                    pretty += "\n" + error["data"]
+                raise Exception(pretty)
 
-        result = data["result"]
-        # NOTE: LLMs do not respond well to empty responses
-        if result is None:
-            result = "success"
-        return result
+            result = data["result"]
+            # NOTE: LLMs do not respond well to empty responses
+            if result is None:
+                result = "success"
+            return result
     except Exception:
         raise
-    finally:
-        conn.close()
 
 @mcp.tool()
 def check_connection() -> str:
