@@ -65,7 +65,9 @@ def check_connection() -> str:
             shortcut = "Ctrl+Option+M"
         else:
             shortcut = "Ctrl+Alt+M"
-        return f"Failed to connect to IDA Pro! Did you run Edit -> Plugins -> MCP ({shortcut}) to start the server?"
+        # Include the actual error for debugging
+        error_details = str(e)
+        return f"Failed to connect to IDA Pro! Error: {error_details}\n\nDid you run Edit -> Plugins -> MCP ({shortcut}) to start the server?\nMake sure IDA server is running on {ida_host}:{ida_port}"
 
 # Code taken from https://github.com/mrexodia/ida-pro-mcp (MIT License)
 class MCPVisitor(ast.NodeVisitor):

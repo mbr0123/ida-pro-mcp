@@ -158,8 +158,13 @@ class JSONRPCRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         global rpc_registry
 
+        # Log incoming connections for debugging
+        client_address = self.client_address[0] if self.client_address else "unknown"
+        print(f"[MCP] Received connection from {client_address} to {self.path}")
+
         parsed_path = urlparse(self.path)
         if parsed_path.path != "/mcp":
+            print(f"[MCP] Invalid endpoint requested: {parsed_path.path}")
             self.send_jsonrpc_error(-32098, "Invalid endpoint", None)
             return
 
@@ -192,8 +197,11 @@ class JSONRPCRequestHandler(http.server.BaseHTTPRequestHandler):
                 raise JSONRPCError(-32600, "Method not specified")
 
             # Dispatch the method
-            result = rpc_registry.dispatch(request["method"], request.get("params", []))
+            method_name = request["method"]
+            print(f"[MCP] Processing request: {method_name}")
+            result = rpc_registry.dispatch(method_name, request.get("params", []))
             response["result"] = result
+            print(f"[MCP] Request {method_name} completed successfully")
 
         except JSONRPCError as e:
             response["error"] = {
@@ -255,10 +263,10 @@ class JSONRPCRequestHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 class MCPHTTPServer(http.server.HTTPServer):
-    allow_reuse_address = False
+    allow_reuse_address = True  # Allow reuse to prevent "Address already in use" errors
 
 class Server:
-    HOST = "localhost"
+    HOST = "127.0.0.1"  # Use explicit IP to match client expectations
     PORT = 13337
 
     def __init__(self):
