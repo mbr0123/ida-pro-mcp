@@ -1145,9 +1145,11 @@ def disassemble_function(
 
         comments = []
         if comment := idaapi.get_cmt(address, False):
-            comments += [comment]
+            if comment and isinstance(comment, str):
+                comments += [comment]
         if comment := idaapi.get_cmt(address, True):
-            comments += [comment]
+            if comment and isinstance(comment, str):
+                comments += [comment]
 
         raw_instruction = idaapi.generate_disasm_line(address, 0)
         tls = ida_kernwin.tagged_line_sections_t()
@@ -1193,38 +1195,55 @@ def disassemble_function(
                         # We couldn't figure out the symbol, so use the whole op_str
                         symbol = op_str
 
-                    comments += [f"{symbol}={addr:#x}"]
+                    if symbol:  # Ensure symbol is not empty
+                        comments += [f"{symbol}={addr:#x}"]
 
-                    # print its value if its type is available
-                    try:
-                        value = get_global_variable_value_internal(addr)
-                    except:
-                        continue
+                        # print its value if its type is available
+                        try:
+                            value = get_global_variable_value_internal(addr)
+                            if value is not None:
+                                comments += [f"*{symbol}={value}"]
+                        except:
+                            continue
 
-                    comments += [f"*{symbol}={value}"]
-
-                operands += [op_str]
+                if op_str and isinstance(op_str, str):
+                    operands += [op_str]
 
         # Extract instruction mnemonic and operands
         if insn_section is not None:
-            mnem = ida_lines.tag_remove(insn_section.substr(raw_instruction))
-            instruction = f"{mnem} {', '.join(operands)}"
+            try:
+                mnem = ida_lines.tag_remove(insn_section.substr(raw_instruction))
+                if not mnem:
+                    mnem = "unknown"
+                # Filter out any None operands
+                valid_operands = [op for op in operands if op and isinstance(op, str)]
+                instruction = f"{mnem} {', '.join(valid_operands)}" if valid_operands else mnem
+            except:
+                instruction = ida_lines.tag_remove(raw_instruction) if raw_instruction else "unknown"
         else:
             # Fallback: use the raw instruction with tags removed
-            instruction = ida_lines.tag_remove(raw_instruction)
+            try:
+                instruction = ida_lines.tag_remove(raw_instruction) if raw_instruction else "unknown"
+            except:
+                instruction = "unknown"
 
+        # Create the base line with required fields
         line = DisassemblyLine(
             address=f"{address:#x}",
-            instruction=instruction,
+            instruction=instruction if instruction else "unknown",
         )
 
-        if len(comments) > 0:
-            line.update(comments=comments)
+        # Add optional fields only if they're valid
+        if comments and isinstance(comments, list) and len(comments) > 0:
+            # Ensure all comments are strings
+            valid_comments = [c for c in comments if c and isinstance(c, str)]
+            if valid_comments:
+                line.update(comments=valid_comments)
 
-        if segment:
+        if segment and isinstance(segment, str):
             line.update(segment=segment)
 
-        if label:
+        if label and isinstance(label, str):
             line.update(label=label)
 
         # Ensure line is valid before adding

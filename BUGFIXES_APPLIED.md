@@ -182,7 +182,11 @@ allow_reuse_address = True  # Allow reuse to prevent binding errors
 - Stack frame variable extraction with fallbacks
 - Function name extraction with fallbacks
 - Line validation before adding to array
-**Impact**: Prevents type validation errors and ensures all required fields are valid arrays.
+- Comments array validation (ensure all are strings)
+- Operands array validation (filter out None values)
+- Instruction string safety checks with fallbacks
+- Comprehensive field validation before creating DisassemblyLine objects
+**Impact**: Prevents type validation errors and ensures all required fields are valid arrays with no None values.
 
 ## Files Modified
 - `src/ida_pro_mcp/mcp-plugin.py` - Main fixes for IDA compatibility, thread safety, type handling, host standardization
